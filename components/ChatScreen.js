@@ -1,68 +1,81 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { GiftedChat, Bubble } from 'react-native-gifted-chat';
-import { Ionicons } from '@expo/vector-icons'; // Icon for the button
+import { Ionicons } from '@expo/vector-icons';
+import { FirebaseContext } from '../App';
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  orderBy
+} from 'firebase/firestore';
 
 export default function ChatScreen({ route }) {
-  const { name, bgColor } = route.params || {};
+  const { name, bgColor, uid } = route.params || {};
+  const { db } = useContext(FirebaseContext); // get Firestore db from context
   const [messages, setMessages] = useState([]);
 
+  const messagesRef = collection(db, 'messages');
+
   useEffect(() => {
-  setMessages([
-    {
-      _id: 1,
-      text: `You have entered Chatter Box.`,
-      createdAt: new Date(),
-      system: true,
-    },
-    {
-      _id: 2,
-      text: 'Hey! Awesome to be here.',
-      createdAt: new Date(),
-      user: {
-        _id: 1,
-        name: name || 'You',
-      },
-    },
-  ]);
-}, []);
+    // Listen for real-time updates from Firestore, ordered newest first
+    const q = query(messagesRef, orderBy('createdAt', 'desc'));
 
-  const onSend = (newMessages) => {
-    setMessages((previousMessages) =>
-      GiftedChat.append(previousMessages, newMessages)
-    );
-  };
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const loadedMessages = snapshot.docs.map(doc => {
+        const firebaseData = doc.data();
 
-  // 🗨️ Custom bubble rendering
-  const renderBubble = (props) => {
-    return (
-      <Bubble
-        {...props}
-        wrapperStyle={{
-          right: {
-            backgroundColor: '#000',
-          },
-          left: {
-            backgroundColor: '#FFF',
-          },
-        }}
-        textStyle={{
-          right: {
-            color: '#FFF',
-          },
-          left: {
-            color: '#000',
-          },
-        }}
-      />
-    );
-  };
+        return {
+          _id: doc.id,
+          text: firebaseData.text,
+          createdAt: firebaseData.createdAt?.toDate?.() || new Date(),
+          user: firebaseData.user,
+        };
+      });
 
-  // ➕ Custom action button with accessibility
-  const renderActions = (props) => {
+      setMessages(loadedMessages);
+    });
+
+    // Clean up listener on unmount
+    return () => unsubscribe();
+  }, [db]);
+
+  const onSend = useCallback(async (newMessages = []) => {
+    const message = newMessages[0];
+
+    try {
+      await addDoc(messagesRef, {
+        text: message.text,
+        createdAt: new Date(),
+        user: {
+          _id: uid,
+          name: name || 'You',
+        },
+      });
+    } catch (error) {
+      console.error("Error sending message: ", error);
+    }
+  }, [messagesRef, name]);
+
+  const renderBubble = (props) => (
+    <Bubble
+      {...props}
+      wrapperStyle={{
+        right: { backgroundColor: '#000' },
+        left: { backgroundColor: '#FFF' },
+      }}
+      textStyle={{
+        right: { color: '#FFF' },
+        left: { color: '#000' },
+      }}
+    />
+  );
+
+  const renderActions = () => {
     const onPress = () => {
       console.log('More options pressed');
-      // Add your image or geolocation logic here
+      // Future feature: send images, location, etc.
     };
 
     return (
@@ -81,15 +94,18 @@ export default function ChatScreen({ route }) {
   };
 
   return (
-    <GiftedChat
-      messages={messages}
-      onSend={(messages) => onSend(messages)}
-      user={{
-        _id: 1,
-      }}
-      renderBubble={renderBubble}
-      renderActions={renderActions}
-    />
+    <View style={[styles.container, { backgroundColor: bgColor || '#FFF' }]}>
+      <GiftedChat
+        messages={messages}
+        onSend={onSend}
+        user={{
+          _id: uid,
+          name: name || 'You',
+        }}
+        renderBubble={renderBubble}
+        renderActions={renderActions}
+      />
+    </View>
   );
 }
 

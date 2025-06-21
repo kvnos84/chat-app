@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Pressable,
-  ImageBackground
+  ImageBackground,
 } from 'react-native';
+
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from '../firebase';
 
 // List of background color options
 const colors = ['#090C08', '#474056', '#8A95A5', '#B9C6AE'];
@@ -23,7 +26,7 @@ export default function StartScreen({ navigation }) {
       style={styles.background}
       resizeMode="cover"
     >
-      <View style={[styles.container]}>
+      <View style={styles.container}>
         <Text style={styles.title}>Chatter Box</Text>
 
         <View style={styles.box}>
@@ -37,6 +40,7 @@ export default function StartScreen({ navigation }) {
             />
 
             <Text style={styles.chooseColorLabel}>Choose Background Color:</Text>
+
             <View style={styles.colorOptions}>
               {colors.map((color) => (
                 <Pressable
@@ -53,12 +57,19 @@ export default function StartScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.button}
-              onPress={() =>
-                navigation.navigate('ChatScreen', {
-                  name: name,
-                  bgColor: bgColor,
-                })
-              }
+              onPress={() => {
+                signInAnonymously(auth)
+                  .then((result) => {
+                    navigation.navigate('ChatScreen', {
+                      uid: result.user.uid,
+                      name: name,
+                      bgColor: bgColor,
+                    });
+                  })
+                  .catch((error) => {
+                    console.error('Anonymous sign-in failed:', error);
+                  });
+              }}
             >
               <Text style={styles.buttonText}>Chat Now</Text>
             </TouchableOpacity>
